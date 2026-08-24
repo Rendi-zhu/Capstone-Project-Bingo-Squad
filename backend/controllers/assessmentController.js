@@ -32,7 +32,7 @@ const createAssessment = (req, res) => {
       });
     }
 
-    const sql = `
+    const insertSql = `
       INSERT INTO assessments
       (
         reflection_id,
@@ -43,25 +43,59 @@ const createAssessment = (req, res) => {
     `;
 
     db.query(
-      sql,
+      insertSql,
       [
         reflection_id,
-        assessor_score || null,
-        feedback || null
+        assessor_score ?? null,
+        feedback ?? null
       ],
-      (err, result) => {
-        if (err) {
-          console.error("Error creating assessment:", err);
+      (insertErr, result) => {
+        if (insertErr) {
+          console.error("Error creating assessment:", insertErr);
 
           return res.status(500).json({
             message: "Failed to create assessment"
           });
         }
 
-        res.status(201).json({
-          message: "Assessment created successfully",
-          assessmentId: result.insertId
-        });
+        console.log(
+          "Assessment created. Updating reflection status:",
+          reflection_id
+        );
+
+        const statusSql = `
+          UPDATE reflections
+          SET status = 'assessed'
+          WHERE id = ?
+        `;
+
+        db.query(
+          statusSql,
+          [reflection_id],
+          (statusErr, statusResult) => {
+            if (statusErr) {
+              console.error(
+                "Error updating reflection status:",
+                statusErr
+              );
+
+              return res.status(500).json({
+                message:
+                  "Assessment created but reflection status update failed"
+              });
+            }
+
+            console.log(
+              "Reflection status update result:",
+              statusResult
+            );
+
+            res.status(201).json({
+              message: "Assessment created successfully",
+              assessmentId: result.insertId
+            });
+          }
+        );
       }
     );
   });
@@ -102,7 +136,7 @@ const updateAssessment = (req, res) => {
     feedback
   } = req.body;
 
-  const sql = `
+  const updateSql = `
     UPDATE assessments
     SET
       assessor_score = ?,
@@ -111,10 +145,10 @@ const updateAssessment = (req, res) => {
   `;
 
   db.query(
-    sql,
+    updateSql,
     [
-      assessor_score || null,
-      feedback || null,
+      assessor_score ?? null,
+      feedback ?? null,
       reflectionId
     ],
     (err, result) => {
@@ -132,9 +166,43 @@ const updateAssessment = (req, res) => {
         });
       }
 
-      res.json({
-        message: "Assessment updated successfully"
-      });
+      console.log(
+        "Assessment updated. Updating reflection status:",
+        reflectionId
+      );
+
+      const statusSql = `
+        UPDATE reflections
+        SET status = 'assessed'
+        WHERE id = ?
+      `;
+
+      db.query(
+        statusSql,
+        [reflectionId],
+        (statusErr, statusResult) => {
+          if (statusErr) {
+            console.error(
+              "Error updating reflection status:",
+              statusErr
+            );
+
+            return res.status(500).json({
+              message:
+                "Assessment updated but reflection status update failed"
+            });
+          }
+
+          console.log(
+            "Reflection status update result:",
+            statusResult
+          );
+
+          res.json({
+            message: "Assessment updated successfully"
+          });
+        }
+      );
     }
   );
 };

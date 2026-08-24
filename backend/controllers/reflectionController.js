@@ -53,6 +53,7 @@ const createReflection = (req, res) => {
     challenges,
     learned,
     improvement,
+    other_reflection,
     status
   } = req.body;
 
@@ -73,9 +74,10 @@ const createReflection = (req, res) => {
       challenges,
       learned,
       improvement,
+      other_reflection,
       status
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   db.query(
@@ -89,6 +91,7 @@ const createReflection = (req, res) => {
       challenges,
       learned,
       improvement,
+      other_reflection || null,
       status || "draft"
     ],
     (err, result) => {
@@ -121,6 +124,7 @@ const updateReflection = (req, res) => {
     challenges,
     learned,
     improvement,
+    other_reflection,
     status
   } = req.body;
 
@@ -141,6 +145,7 @@ const updateReflection = (req, res) => {
       challenges = ?,
       learned = ?,
       improvement = ?,
+      other_reflection = ?,
       status = ?
     WHERE id = ?
   `;
@@ -156,6 +161,7 @@ const updateReflection = (req, res) => {
       challenges,
       learned,
       improvement,
+      other_reflection || null,
       status || "draft",
       id
     ],
