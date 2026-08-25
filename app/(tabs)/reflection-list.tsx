@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-
 import { router } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 
-import { useMemo, useState } from "react";
+import { API_BASE_URL } from "../../services/api";
 
 import {
   KeyboardAvoidingView,
@@ -15,7 +15,10 @@ import {
   View,
 } from "react-native";
 
-type Status = "Draft" | "Submitted" | "Assessed";
+type Status =
+  | "Draft"
+  | "Submitted"
+  | "Assessed";
 
 interface ReflectionItem {
   id: string;
@@ -23,203 +26,677 @@ interface ReflectionItem {
   status: Status;
   submittedDate?: string;
   progress?: number;
-  selected: boolean;
 }
 
-const FILTERS: ("All" | Status)[] = ["All", "Draft", "Submitted", "Assessed"];
-
-// No real drafts/submissions exist yet - starts empty until storage is wired up
-const initialReflections: ReflectionItem[] = [];
+const FILTERS: (
+  | "All"
+  | Status
+)[] = [
+  "All",
+  "Draft",
+  "Submitted",
+  "Assessed",
+];
 
 export default function ReflectionList() {
-  const [reflections, setReflections] =
-    useState<ReflectionItem[]>(initialReflections);
-  const [activeFilter, setActiveFilter] = useState<"All" | Status>("All");
-  const [searchText, setSearchText] = useState("");
+  const [
+    reflections,
+    setReflections,
+  ] = useState<
+    ReflectionItem[]
+  >([]);
 
-  const toggleSelected = (id: string) => {
-    setReflections((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, selected: !item.selected } : item,
-      ),
-    );
-  };
+  const [
+    activeFilter,
+    setActiveFilter,
+  ] = useState<
+    "All" | Status
+  >("All");
 
-  const filteredReflections = useMemo(() => {
-    return reflections.filter((item) => {
-      const matchesFilter =
-        activeFilter === "All" || item.status === activeFilter;
+  const [
+    searchText,
+    setSearchText,
+  ] = useState("");
 
-      const matchesSearch = item.title
-        .toLowerCase()
-        .includes(searchText.trim().toLowerCase());
+  const [
+    isLoading,
+    setIsLoading,
+  ] = useState(true);
 
-      return matchesFilter && matchesSearch;
-    });
-  }, [reflections, activeFilter, searchText]);
+  // ====================================================
+  // LOAD REFLECTIONS
+  // ====================================================
 
-  const iconFor = (status: Status) => {
+  const loadReflections =
+    async () => {
+      try {
+        setIsLoading(true);
+
+        console.log(
+          "Loading reflections from backend..."
+        );
+
+        const response =
+          await fetch(
+            `${API_BASE_URL}/api/reflections`
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to load reflections: ${response.status}`
+          );
+        }
+
+        const data =
+          await response.json();
+
+        console.log(
+          "Reflections received:",
+          data
+        );
+
+        const formattedReflections:
+          ReflectionItem[] =
+          data.map(
+            (item: any) => ({
+              id:
+                String(
+                  item.id
+                ),
+
+              title:
+                item.title,
+
+              status:
+                item.status ===
+                "submitted"
+                  ? "Submitted"
+                  : item.status ===
+                      "assessed"
+                    ? "Assessed"
+                    : "Draft",
+
+              submittedDate:
+                item.status !==
+                "draft"
+                  ? new Date(
+                      item.updated_at
+                    ).toLocaleDateString()
+                  : undefined,
+
+              progress:
+                item.status ===
+                "draft"
+                  ? 0.5
+                  : undefined,
+            })
+          );
+
+        setReflections(
+          formattedReflections
+        );
+      } catch (error) {
+        console.error(
+          "Error loading reflections:",
+          error
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+  useEffect(() => {
+    loadReflections();
+  }, []);
+
+  // ====================================================
+  // OPEN EXISTING REFLECTION
+  // ====================================================
+
+  const handleOpenReflection =
+    (
+      item: ReflectionItem
+    ) => {
+      console.log(
+        "Opening reflection:",
+        item.id,
+        item.status
+      );
+
+      if (
+        item.status ===
+        "Draft"
+      ) {
+        router.push({
+          pathname:
+            "/(tabs)/reflection",
+
+          params: {
+            reflectionId:
+              item.id,
+          },
+        });
+
+        return;
+      }
+
+      router.push({
+        pathname:
+          "/(tabs)/assessment-result",
+
+        params: {
+          reflectionId:
+            item.id,
+        },
+      });
+    };
+
+  // ====================================================
+  // FILTER + SEARCH
+  // ====================================================
+
+  const filteredReflections =
+    useMemo(() => {
+      return reflections.filter(
+        (item) => {
+          const matchesFilter =
+            activeFilter ===
+              "All" ||
+            item.status ===
+              activeFilter;
+
+          const matchesSearch =
+            item.title
+              .toLowerCase()
+              .includes(
+                searchText
+                  .trim()
+                  .toLowerCase()
+              );
+
+          return (
+            matchesFilter &&
+            matchesSearch
+          );
+        }
+      );
+    }, [
+      reflections,
+      activeFilter,
+      searchText,
+    ]);
+
+  // ====================================================
+  // STATUS ICON
+  // ====================================================
+
+  const iconFor = (
+    status: Status
+  ) => {
     switch (status) {
       case "Assessed":
         return "checkmark-circle";
+
       case "Submitted":
         return "document-text";
+
       default:
         return "document";
     }
   };
 
-  const handleExportPortfolio = () => {
-    // EXPORT PORTFOLIO FUNCTIONALITY GOES HERE
+  // ====================================================
+  // STATUS COLOUR
+  // ====================================================
+
+  const statusColor = (
+    status: Status
+  ) => {
+    switch (status) {
+      case "Assessed":
+        return "#2E7D32";
+
+      case "Submitted":
+        return "#3F2A88";
+
+      default:
+        return "#B26A00";
+    }
   };
 
+  // ====================================================
+  // EXPORT PORTFOLIO
+  // ====================================================
+
+  const handleExportPortfolio =
+    () => {
+      console.log(
+        "Export portfolio pressed"
+      );
+
+      // EXPORT FUNCTIONALITY
+      // CAN BE ADDED LATER
+    };
+
   const isFilteredOrSearched =
-    activeFilter !== "All" || searchText.trim().length > 0;
+    activeFilter !== "All" ||
+    searchText.trim()
+      .length > 0;
+
+  // ====================================================
+  // SCREEN
+  // ====================================================
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={
+        styles.container
+      }
+      behavior={
+        Platform.OS ===
+        "ios"
+          ? "padding"
+          : "height"
+      }
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.content}>
-          {/* Header */}
-          <Text style={styles.title}>Reflection History</Text>
-          <Text style={styles.subtitle}>view all of your reflections.</Text>
+      <ScrollView
+        contentContainerStyle={
+          styles.scrollContent
+        }
+      >
+        <View
+          style={
+            styles.content
+          }
+        >
+          {/* HEADER */}
 
-          {/* Filter tabs */}
-          <View style={styles.filterRow}>
-            {FILTERS.map((filter) => {
-              const active = filter === activeFilter;
+          <Text
+            style={
+              styles.title
+            }
+          >
+            Reflection History
+          </Text>
 
-              return (
-                <Pressable
-                  key={filter}
-                  style={[styles.filterPill, active && styles.filterPillActive]}
-                  onPress={() => setActiveFilter(filter)}
-                >
-                  <Text
+          <Text
+            style={
+              styles.subtitle
+            }
+          >
+            View all of your reflections.
+          </Text>
+
+          {/* FILTER TABS */}
+
+          <View
+            style={
+              styles.filterRow
+            }
+          >
+            {FILTERS.map(
+              (filter) => {
+                const active =
+                  filter ===
+                  activeFilter;
+
+                return (
+                  <Pressable
+                    key={
+                      filter
+                    }
                     style={[
-                      styles.filterText,
-                      active && styles.filterTextActive,
+                      styles.filterPill,
+
+                      active &&
+                        styles.filterPillActive,
                     ]}
+                    onPress={() =>
+                      setActiveFilter(
+                        filter
+                      )
+                    }
                   >
-                    {filter}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                    <Text
+                      style={[
+                        styles.filterText,
 
-          {/* Reflection list */}
-          <View style={styles.list}>
-            {filteredReflections.map((item) => (
-              <Pressable
-                key={item.id}
-                style={styles.card}
-                onPress={() => toggleSelected(item.id)}
-              >
-                <View style={styles.cardIcon}>
-                  <Ionicons
-                    name={iconFor(item.status)}
-                    size={20}
-                    color="#3F2A88"
-                  />
-                </View>
-
-                <View style={styles.cardInfo}>
-                  <Text style={styles.cardTitle}>{item.title}</Text>
-
-                  {item.status === "Draft" ? (
-                    <View style={styles.progressTrack}>
-                      <View
-                        style={[
-                          styles.progressFill,
-                          {
-                            width: `${(item.progress ?? 0) * 100}%`,
-                          },
-                        ]}
-                      />
-                    </View>
-                  ) : (
-                    <Text style={styles.cardMeta}>
-                      Submitted {item.submittedDate}
+                        active &&
+                          styles.filterTextActive,
+                      ]}
+                    >
+                      {filter}
                     </Text>
-                  )}
-                </View>
-
-                <View
-                  style={[
-                    styles.checkbox,
-                    item.selected && styles.checkboxChecked,
-                  ]}
-                >
-                  {item.selected && (
-                    <Ionicons name="checkmark" size={14} color="#FFF" />
-                  )}
-                </View>
-              </Pressable>
-            ))}
-
-            {filteredReflections.length === 0 && (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>
-                  {isFilteredOrSearched
-                    ? "No reflections match this filter."
-                    : "You haven't created any reflections yet."}
-                </Text>
-
-                {!isFilteredOrSearched && (
-                  <Text style={styles.emptyStateSubtext}>
-                    Tap "Create New Reflection" below to get started.
-                  </Text>
-                )}
-              </View>
+                  </Pressable>
+                );
+              }
             )}
           </View>
 
-          {/* Actions */}
-          <Pressable
-            style={styles.primaryButton}
-            onPress={() => router.push("/(tabs)/new-reflection")}
+          {/* REFLECTION LIST */}
+
+          <View
+            style={
+              styles.list
+            }
           >
-            <Ionicons name="add" size={18} color="#FFF" />
-            <Text style={styles.primaryButtonText}>Create New Reflection</Text>
-          </Pressable>
+            {isLoading ? (
+              <View
+                style={
+                  styles.emptyState
+                }
+              >
+                <Text
+                  style={
+                    styles.emptyStateText
+                  }
+                >
+                  Loading reflections...
+                </Text>
+              </View>
+            ) : (
+              <>
+                {filteredReflections.map(
+                  (item) => (
+                    <Pressable
+                      key={
+                        item.id
+                      }
+                      style={({
+                        pressed,
+                      }) => [
+                        styles.card,
+
+                        pressed &&
+                          styles.cardPressed,
+                      ]}
+                      onPress={() =>
+                        handleOpenReflection(
+                          item
+                        )
+                      }
+                    >
+                      <View
+                        style={
+                          styles.cardIcon
+                        }
+                      >
+                        <Ionicons
+                          name={
+                            iconFor(
+                              item.status
+                            )
+                          }
+                          size={
+                            20
+                          }
+                          color="#3F2A88"
+                        />
+                      </View>
+
+                      <View
+                        style={
+                          styles.cardInfo
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.cardTitle
+                          }
+                          numberOfLines={
+                            1
+                          }
+                        >
+                          {
+                            item.title
+                          }
+                        </Text>
+
+                        {item.status ===
+                        "Draft" ? (
+                          <>
+                            <Text
+                              style={[
+                                styles.statusText,
+
+                                {
+                                  color:
+                                    statusColor(
+                                      item.status
+                                    ),
+                                },
+                              ]}
+                            >
+                              Draft
+                            </Text>
+
+                            <View
+                              style={
+                                styles.progressTrack
+                              }
+                            >
+                              <View
+                                style={[
+                                  styles.progressFill,
+
+                                  {
+                                    width: `${
+                                      (item.progress ??
+                                        0) *
+                                      100
+                                    }%`,
+                                  },
+                                ]}
+                              />
+                            </View>
+                          </>
+                        ) : (
+                          <>
+                            <Text
+                              style={[
+                                styles.statusText,
+
+                                {
+                                  color:
+                                    statusColor(
+                                      item.status
+                                    ),
+                                },
+                              ]}
+                            >
+                              {
+                                item.status
+                              }
+                            </Text>
+
+                            <Text
+                              style={
+                                styles.cardMeta
+                              }
+                            >
+                              Updated{" "}
+                              {
+                                item.submittedDate
+                              }
+                            </Text>
+                          </>
+                        )}
+                      </View>
+
+                      <Ionicons
+                        name="chevron-forward"
+                        size={
+                          20
+                        }
+                        color="#888"
+                      />
+                    </Pressable>
+                  )
+                )}
+
+                {filteredReflections.length ===
+                  0 && (
+                  <View
+                    style={
+                      styles.emptyState
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.emptyStateText
+                      }
+                    >
+                      {isFilteredOrSearched
+                        ? "No reflections match this filter."
+                        : "You haven't created any reflections yet."}
+                    </Text>
+
+                    {!isFilteredOrSearched && (
+                      <Text
+                        style={
+                          styles.emptyStateSubtext
+                        }
+                      >
+                        Tap "Create New Reflection" below to get started.
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+
+          {/* CREATE NEW REFLECTION */}
 
           <Pressable
-            style={styles.primaryButton}
-            onPress={handleExportPortfolio}
+            style={({
+              pressed,
+            }) => [
+              styles.primaryButton,
+
+              pressed &&
+                styles.primaryButtonPressed,
+            ]}
+            onPress={() =>
+              router.push(
+                "/(tabs)/new-reflection"
+              )
+            }
           >
-            <Ionicons name="share-outline" size={18} color="#FFF" />
-            <Text style={styles.primaryButtonText}>Export portfolio</Text>
+            <Ionicons
+              name="add"
+              size={
+                18
+              }
+              color="#FFF"
+            />
+
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
+              Create New Reflection
+            </Text>
+          </Pressable>
+
+          {/* EXPORT */}
+
+          <Pressable
+            style={({
+              pressed,
+            }) => [
+              styles.secondaryButton,
+
+              pressed &&
+                styles.primaryButtonPressed,
+            ]}
+            onPress={
+              handleExportPortfolio
+            }
+          >
+            <Ionicons
+              name="share-outline"
+              size={
+                18
+              }
+              color="#3F2A88"
+            />
+
+            <Text
+              style={
+                styles.secondaryButtonText
+              }
+            >
+              Export Portfolio
+            </Text>
           </Pressable>
         </View>
       </ScrollView>
 
-      {/* Search bar */}
-      <View style={styles.searchBarRow}>
-        <View style={styles.searchBar}>
-          <Ionicons name="search" size={18} color="#888" />
+      {/* SEARCH BAR */}
 
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search reflections"
-            placeholderTextColor="#999"
-            value={searchText}
-            onChangeText={setSearchText}
+      <View
+        style={
+          styles.searchBarRow
+        }
+      >
+        <View
+          style={
+            styles.searchBar
+          }
+        >
+          <Ionicons
+            name="search"
+            size={
+              18
+            }
+            color="#888"
           />
 
-          <Ionicons name="mic-outline" size={18} color="#888" />
+          <TextInput
+            style={
+              styles.searchInput
+            }
+            placeholder="Search reflections"
+            placeholderTextColor="#999"
+            value={
+              searchText
+            }
+            onChangeText={
+              setSearchText
+            }
+          />
+
+          <Ionicons
+            name="mic-outline"
+            size={
+              18
+            }
+            color="#888"
+          />
         </View>
 
-        {searchText.length > 0 && (
+        {searchText.length >
+          0 && (
           <Pressable
-            style={styles.searchClear}
-            onPress={() => setSearchText("")}
+            style={
+              styles.searchClear
+            }
+            onPress={() =>
+              setSearchText(
+                ""
+              )
+            }
             accessibilityLabel="Clear search"
           >
-            <Ionicons name="close" size={18} color="#000" />
+            <Ionicons
+              name="close"
+              size={
+                18
+              }
+              color="#000"
+            />
           </Pressable>
         )}
       </View>
@@ -227,209 +704,294 @@ export default function ReflectionList() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F8F8F8",
-  },
+// ======================================================
+// STYLES
+// ======================================================
 
-  scrollContent: {
-    paddingBottom: 20,
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        "#F8F8F8",
+    },
 
-  content: {
-    width: "90%",
-    alignSelf: "center",
-    paddingTop: 15,
-  },
+    scrollContent: {
+      paddingBottom: 20,
+    },
 
-  title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#000",
-  },
+    content: {
+      width: "90%",
+      alignSelf:
+        "center",
+      paddingTop: 15,
+    },
 
-  subtitle: {
-    fontSize: 14,
-    color: "#555",
-    marginTop: 3,
-    marginBottom: 20,
-  },
+    title: {
+      fontSize: 22,
+      fontWeight:
+        "bold",
+      color: "#000",
+    },
 
-  filterRow: {
-    flexDirection: "row",
-    backgroundColor: "#EFEBFB",
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 20,
-  },
+    subtitle: {
+      fontSize: 14,
+      color: "#555",
+      marginTop: 3,
+      marginBottom: 20,
+    },
 
-  filterPill: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
-    alignItems: "center",
-  },
+    filterRow: {
+      flexDirection:
+        "row",
+      backgroundColor:
+        "#EFEBFB",
+      borderRadius: 12,
+      padding: 4,
+      marginBottom: 20,
+    },
 
-  filterPillActive: {
-    backgroundColor: "#3F2A88",
-  },
+    filterPill: {
+      flex: 1,
+      paddingVertical: 8,
+      borderRadius: 10,
+      alignItems:
+        "center",
+    },
 
-  filterText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#3F2A88",
-  },
+    filterPillActive: {
+      backgroundColor:
+        "#3F2A88",
+    },
 
-  filterTextActive: {
-    color: "#FFFFFF",
-  },
+    filterText: {
+      fontSize: 13,
+      fontWeight:
+        "600",
+      color: "#3F2A88",
+    },
 
-  list: {
-    gap: 12,
-    marginBottom: 25,
-  },
+    filterTextActive: {
+      color: "#FFFFFF",
+    },
 
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E5E5",
-    borderRadius: 14,
-    padding: 14,
-    gap: 12,
-  },
+    list: {
+      gap: 12,
+      marginBottom: 25,
+    },
 
-  cardIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#EFEBFB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    card: {
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor:
+        "#E5E5E5",
+      borderRadius: 14,
+      padding: 14,
+      gap: 12,
+    },
 
-  cardInfo: {
-    flex: 1,
-  },
+    cardPressed: {
+      opacity: 0.78,
 
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#000",
-    marginBottom: 6,
-  },
+      transform: [
+        {
+          scale: 0.99,
+        },
+      ],
+    },
 
-  cardMeta: {
-    fontSize: 12,
-    color: "#888",
-  },
+    cardIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor:
+        "#EFEBFB",
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+    },
 
-  progressTrack: {
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "#E5E5E5",
-    overflow: "hidden",
-    width: "90%",
-  },
+    cardInfo: {
+      flex: 1,
+    },
 
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#3F2A88",
-    borderRadius: 3,
-  },
+    cardTitle: {
+      fontSize: 15,
+      fontWeight:
+        "700",
+      color: "#000",
+      marginBottom: 4,
+    },
 
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: "#3F2A88",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    statusText: {
+      fontSize: 12,
+      fontWeight:
+        "700",
+      marginBottom: 5,
+    },
 
-  checkboxChecked: {
-    backgroundColor: "#3F2A88",
-  },
+    cardMeta: {
+      fontSize: 12,
+      color: "#888",
+    },
 
-  emptyState: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E5E5",
-    borderRadius: 12,
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-    alignItems: "center",
-  },
+    progressTrack: {
+      height: 5,
+      borderRadius: 3,
+      backgroundColor:
+        "#E5E5E5",
+      overflow:
+        "hidden",
+      width: "90%",
+    },
 
-  emptyStateText: {
-    color: "#555",
-    fontSize: 14,
-    fontWeight: "600",
-    textAlign: "center",
-  },
+    progressFill: {
+      height: "100%",
+      backgroundColor:
+        "#3F2A88",
+      borderRadius: 3,
+    },
 
-  emptyStateSubtext: {
-    color: "#888",
-    fontSize: 13,
-    textAlign: "center",
-    marginTop: 6,
-  },
+    emptyState: {
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor:
+        "#E5E5E5",
+      borderRadius: 12,
+      paddingVertical: 24,
+      paddingHorizontal: 20,
+      alignItems:
+        "center",
+    },
 
-  primaryButton: {
-    width: "100%",
-    height: 50,
-    backgroundColor: "#3F2A88",
-    borderRadius: 15,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
-  },
+    emptyStateText: {
+      color: "#555",
+      fontSize: 14,
+      fontWeight:
+        "600",
+      textAlign:
+        "center",
+    },
 
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
+    emptyStateSubtext: {
+      color: "#888",
+      fontSize: 13,
+      textAlign:
+        "center",
+      marginTop: 6,
+    },
 
-  searchBarRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: "5%",
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#E5E5E5",
-    backgroundColor: "#F8F8F8",
-  },
+    primaryButton: {
+      width: "100%",
+      height: 50,
+      backgroundColor:
+        "#3F2A88",
+      borderRadius: 15,
+      flexDirection:
+        "row",
+      justifyContent:
+        "center",
+      alignItems:
+        "center",
+      gap: 8,
+      marginBottom: 12,
+    },
 
-  searchBar: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#EDEDED",
-    borderRadius: 25,
-    paddingHorizontal: 15,
-    height: 44,
-  },
+    secondaryButton: {
+      width: "100%",
+      height: 50,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1.5,
+      borderColor:
+        "#3F2A88",
+      borderRadius: 15,
+      flexDirection:
+        "row",
+      justifyContent:
+        "center",
+      alignItems:
+        "center",
+      gap: 8,
+      marginBottom: 12,
+    },
 
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: "#000",
-  },
+    primaryButtonPressed: {
+      opacity: 0.8,
 
-  searchClear: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#EDEDED",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
+      transform: [
+        {
+          scale: 0.99,
+        },
+      ],
+    },
+
+    primaryButtonText: {
+      color: "#FFFFFF",
+      fontSize: 16,
+      fontWeight:
+        "600",
+    },
+
+    secondaryButtonText: {
+      color: "#3F2A88",
+      fontSize: 16,
+      fontWeight:
+        "600",
+    },
+
+    searchBarRow: {
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 10,
+      paddingHorizontal:
+        "5%",
+      paddingVertical: 12,
+      borderTopWidth: 1,
+      borderTopColor:
+        "#E5E5E5",
+      backgroundColor:
+        "#F8F8F8",
+    },
+
+    searchBar: {
+      flex: 1,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 8,
+      backgroundColor:
+        "#EDEDED",
+      borderRadius: 25,
+      paddingHorizontal: 15,
+      height: 44,
+    },
+
+    searchInput: {
+      flex: 1,
+      fontSize: 14,
+      color: "#000",
+    },
+
+    searchClear: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor:
+        "#EDEDED",
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+    },
+  });

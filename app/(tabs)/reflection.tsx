@@ -1,7 +1,10 @@
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
+
+import { API_BASE_URL } from "../../services/api";
 
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,29 +14,206 @@ import {
 } from "react-native";
 
 export default function Reflection() {
+  const params = useLocalSearchParams();
+
+  const reflectionId = Array.isArray(params.reflectionId)
+    ? params.reflectionId[0]
+    : params.reflectionId;
+
   const [workedOn, setWorkedOn] = useState("");
   const [challenges, setChallenges] = useState("");
   const [learning, setLearning] = useState("");
   const [improvements, setImprovements] = useState("");
   const [otherReflection, setOtherReflection] = useState("");
 
-  const handleSaveDraft = () => {
-    // SAVE DRAFT FUNCTIONALITY GOES HERE
+  const [title, setTitle] = useState("");
+  const [projectGroup, setProjectGroup] = useState("");
+  const [reflectionDate, setReflectionDate] = useState("");
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load existing reflection draft
+  useEffect(() => {
+    const loadReflection = async () => {
+      if (!reflectionId) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/reflections/${reflectionId}`
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to load reflection");
+        }
+
+        const data = await response.json();
+
+        setTitle(data.title ?? "");
+        setProjectGroup(data.project_group ?? "");
+
+        if (data.reflection_date) {
+          setReflectionDate(
+            String(data.reflection_date).slice(0, 10)
+          );
+        }
+
+        setWorkedOn(data.worked_on ?? "");
+        setChallenges(data.challenges ?? "");
+        setLearning(data.learned ?? "");
+        setImprovements(data.improvement ?? "");
+        setOtherReflection(data.other_reflection ?? "");
+      } catch (error) {
+        console.error("Error loading reflection:", error);
+
+        Alert.alert(
+          "Error",
+          "Could not load the reflection."
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadReflection();
+  }, [reflectionId]);
+
+  // Save reflection as draft
+  const saveDraft = async () => {
+    if (!reflectionId) {
+      Alert.alert(
+        "Error",
+        "Reflection ID is missing."
+      );
+
+      return false;
+    }
+
+    try {
+      setIsSaving(true);
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/reflections/${reflectionId}`,
+        {
+          method: "PUT",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({
+            user_id: 1,
+            title,
+            project_group: projectGroup,
+            reflection_date: reflectionDate,
+
+            worked_on: workedOn,
+            challenges: challenges,
+            learned: learning,
+            improvement: improvements,
+            other_reflection: otherReflection,
+
+            status: "draft",
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Failed to save reflection"
+        );
+      }
+
+      console.log(
+        "Reflection draft saved:",
+        data
+      );
+
+      return true;
+    } catch (error) {
+      console.error(
+        "Error saving reflection:",
+        error
+      );
+
+      Alert.alert(
+        "Error",
+        "Could not save the draft. Please try again."
+      );
+
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
   };
 
+  // Save Draft button
+  const handleSaveDraft = async () => {
+    const success = await saveDraft();
+
+    if (success) {
+      Alert.alert(
+        "Saved",
+        "Your reflection draft has been saved."
+      );
+    }
+  };
+
+  // Next button
+  const handleNext = async () => {
+    const success = await saveDraft();
+
+    if (!success) {
+      return;
+    }
+
+    router.push({
+      pathname: "/(tabs)/upload-evidence",
+
+      params: {
+        reflectionId: String(reflectionId),
+      },
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>
+          Loading reflection...
+        </Text>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.content}>
         {/* Header */}
-        <Text style={styles.title}>Writing Reflection...</Text>
+
+        <Text style={styles.title}>
+          Writing Reflection...
+        </Text>
 
         <Text style={styles.subtitle}>
           Take some time to reflect on your experience.
         </Text>
 
         {/* What was worked on? */}
+
         <View style={styles.section}>
-          <Text style={styles.label}>What was worked on?</Text>
+          <Text style={styles.label}>
+            What was worked on?
+          </Text>
 
           <TextInput
             style={styles.textBox}
@@ -52,8 +232,11 @@ export default function Reflection() {
         </View>
 
         {/* Challenges */}
+
         <View style={styles.section}>
-          <Text style={styles.label}>What challenges were faced?</Text>
+          <Text style={styles.label}>
+            What challenges were faced?
+          </Text>
 
           <TextInput
             style={styles.textBox}
@@ -72,6 +255,7 @@ export default function Reflection() {
         </View>
 
         {/* Learning */}
+
         <View style={styles.section}>
           <Text style={styles.label}>
             What did you learn from this experience?
@@ -94,6 +278,7 @@ export default function Reflection() {
         </View>
 
         {/* Improvements */}
+
         <View style={styles.section}>
           <Text style={styles.label}>
             What improvements will be made for the future?
@@ -116,6 +301,7 @@ export default function Reflection() {
         </View>
 
         {/* Additional Reflection */}
+
         <View style={styles.section}>
           <Text style={styles.label}>
             What else would you like to reflect on?
@@ -138,16 +324,36 @@ export default function Reflection() {
         </View>
 
         {/* Navigation Buttons */}
+
         <View style={styles.buttonContainer}>
-          <Pressable style={styles.saveButton} onPress={handleSaveDraft}>
-            <Text style={styles.saveButtonText}>Save Draft</Text>
+          <Pressable
+            style={[
+              styles.saveButton,
+              isSaving && styles.disabledButton,
+            ]}
+            onPress={handleSaveDraft}
+            disabled={isSaving}
+          >
+            <Text style={styles.saveButtonText}>
+              {isSaving
+                ? "Saving..."
+                : "Save Draft"}
+            </Text>
           </Pressable>
 
           <Pressable
-            style={styles.nextButton}
-            onPress={() => router.push("/upload-evidence")}
+            style={[
+              styles.nextButton,
+              isSaving && styles.disabledButton,
+            ]}
+            onPress={handleNext}
+            disabled={isSaving}
           >
-            <Text style={styles.nextButtonText}>Next</Text>
+            <Text style={styles.nextButtonText}>
+              {isSaving
+                ? "Saving..."
+                : "Next"}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -159,6 +365,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F8F8F8",
+  },
+
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#F8F8F8",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  loadingText: {
+    fontSize: 16,
+    color: "#555",
   },
 
   content: {
@@ -246,5 +464,9 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
+  },
+
+  disabledButton: {
+    opacity: 0.6,
   },
 });
