@@ -30,6 +30,7 @@ interface ReflectionItem {
   submittedDate?: string;
   progress?: number;
 }
+
 type ReflectionRecord = {
   challenges?: string | null;
   id: number | string;
@@ -68,7 +69,19 @@ type PortfolioReflection = {
   selfAssessment: SelfAssessmentRecord | null;
 };
 
-const escapeHtml = (value: unknown) =>
+const FILTERS: (
+  | "All"
+  | Status
+)[] = [
+  "All",
+  "Draft",
+  "Submitted",
+  "Assessed",
+];
+
+const escapeHtml = (
+  value: unknown
+) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -76,111 +89,130 @@ const escapeHtml = (value: unknown) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
-const formatDate = (value?: string | null) => {
-  if (!value) return "Not provided";
+const formatDate = (
+  value?: string | null
+) => {
+  if (!value) {
+    return "Not provided";
+  }
 
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return value;
+  }
+
+  return date.toLocaleDateString();
 };
 
-const scoreText = (value?: number | string | null) =>
-  value === null || value === undefined || value === ""
+const scoreText = (
+  value?: number | string | null
+) =>
+  value === null ||
+  value === undefined ||
+  value === ""
     ? "Not available"
     : `${value} / 5`;
 
-async function fetchJsonOrNull<T>(url: string): Promise<T | null> {
-  const response = await fetch(url);
+async function fetchJsonOrNull<T>(
+  url: string
+): Promise<T | null> {
+  const response =
+    await fetch(url);
 
-  if (response.status === 404) return null;
+  if (
+    response.status === 404
+  ) {
+    return null;
+  }
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw new Error(
+      `Request failed: ${response.status}`
+    );
   }
 
   return response.json();
 }
 
-const buildPortfolioHtml = (items: PortfolioReflection[]) => {
-  const generatedAt = new Date().toLocaleString();
+const buildPortfolioHtml = (
+  items: PortfolioReflection[]
+) => {
+  const generatedAt =
+    new Date().toLocaleString();
 
-  const sections = items
-    .map(({ assessment, evidence, reflection, selfAssessment }) => {
-      const evidenceList =
-        evidence.length > 0
-          ? evidence
-              .map(
-                (item) =>
-                  `<li>${escapeHtml(item.file_name || "Unnamed evidence")}</li>`
-              )
-              .join("")
-          : "<li>No evidence recorded.</li>";
+  const sections =
+    items
+      .map(
+        ({
+          assessment,
+          evidence,
+          reflection,
+          selfAssessment,
+        }) => {
+          const evidenceList =
+            evidence.length > 0
+              ? evidence
+                  .map(
+                    (item) =>
+                      `<li>${escapeHtml(item.file_name || "Unnamed evidence")}</li>`
+                  )
+                  .join("")
+              : "<li>No evidence recorded.</li>";
 
-      return `
-        <section class="reflection">
-          <div class="status">${escapeHtml(reflection.status || "unknown")}</div>
-          <h2>${escapeHtml(reflection.title || "Untitled Reflection")}</h2>
-          <dl class="meta">
-            <div><dt>Project Group</dt><dd>${escapeHtml(
-              reflection.project_group || "Not provided"
-            )}</dd></div>
-            <div><dt>Date</dt><dd>${escapeHtml(
-              formatDate(reflection.reflection_date || reflection.updated_at)
-            )}</dd></div>
-          </dl>
+          return `
+            <section class="reflection">
+              <div class="status">${escapeHtml(reflection.status || "unknown")}</div>
+              <h2>${escapeHtml(reflection.title || "Untitled Reflection")}</h2>
+              <dl class="meta">
+                <div><dt>Project Group</dt><dd>${escapeHtml(reflection.project_group || "Not provided")}</dd></div>
+                <div><dt>Date</dt><dd>${escapeHtml(formatDate(reflection.reflection_date || reflection.updated_at))}</dd></div>
+              </dl>
 
-          <h3>What was worked on?</h3>
-          <p>${escapeHtml(reflection.worked_on || "Not provided")}</p>
+              <h3>What was worked on?</h3>
+              <p>${escapeHtml(reflection.worked_on || "Not provided")}</p>
 
-          <h3>Challenges</h3>
-          <p>${escapeHtml(reflection.challenges || "Not provided")}</p>
+              <h3>Challenges</h3>
+              <p>${escapeHtml(reflection.challenges || "Not provided")}</p>
 
-          <h3>What I learned</h3>
-          <p>${escapeHtml(reflection.learned || "Not provided")}</p>
+              <h3>What I learned</h3>
+              <p>${escapeHtml(reflection.learned || "Not provided")}</p>
 
-          <h3>Future Improvements</h3>
-          <p>${escapeHtml(reflection.improvement || "Not provided")}</p>
+              <h3>Future Improvements</h3>
+              <p>${escapeHtml(reflection.improvement || "Not provided")}</p>
 
-          ${
-            reflection.other_reflection
-              ? `<h3>Other Reflection</h3><p>${escapeHtml(
-                  reflection.other_reflection
-                )}</p>`
-              : ""
-          }
+              ${
+                reflection.other_reflection
+                  ? `<h3>Other Reflection</h3><p>${escapeHtml(reflection.other_reflection)}</p>`
+                  : ""
+              }
 
-          <h3>Self Assessment</h3>
-          <ul class="scores">
-            <li><span>Contribution</span><strong>${escapeHtml(
-              scoreText(selfAssessment?.contribution)
-            )}</strong></li>
-            <li><span>Communication</span><strong>${escapeHtml(
-              scoreText(selfAssessment?.communication)
-            )}</strong></li>
-            <li><span>Collaboration</span><strong>${escapeHtml(
-              scoreText(selfAssessment?.collaboration)
-            )}</strong></li>
-            <li><span>Critical Thinking</span><strong>${escapeHtml(
-              scoreText(selfAssessment?.critical_thinking)
-            )}</strong></li>
-            <li><span>Problem Solving</span><strong>${escapeHtml(
-              scoreText(selfAssessment?.problem_solving)
-            )}</strong></li>
-          </ul>
+              <h3>Self Assessment</h3>
+              <ul class="scores">
+                <li><span>Contribution</span><strong>${escapeHtml(scoreText(selfAssessment?.contribution))}</strong></li>
+                <li><span>Communication</span><strong>${escapeHtml(scoreText(selfAssessment?.communication))}</strong></li>
+                <li><span>Collaboration</span><strong>${escapeHtml(scoreText(selfAssessment?.collaboration))}</strong></li>
+                <li><span>Critical Thinking</span><strong>${escapeHtml(scoreText(selfAssessment?.critical_thinking))}</strong></li>
+                <li><span>Problem Solving</span><strong>${escapeHtml(scoreText(selfAssessment?.problem_solving))}</strong></li>
+              </ul>
 
-          <h3>Assessor Score</h3>
-          <p>${escapeHtml(scoreText(assessment?.assessor_score))}</p>
+              <h3>Assessor Score</h3>
+              <p>${escapeHtml(scoreText(assessment?.assessor_score))}</p>
 
-          <h3>Assessor Feedback</h3>
-          <p>${escapeHtml(
-            assessment?.feedback || "No assessor feedback recorded."
-          )}</p>
+              <h3>Assessor Feedback</h3>
+              <p>${escapeHtml(assessment?.feedback || "No assessor feedback recorded.")}</p>
 
-          <h3>Evidence</h3>
-          <ul>${evidenceList}</ul>
-        </section>
-      `;
-    })
-    .join("");
+              <h3>Evidence</h3>
+              <ul>${evidenceList}</ul>
+            </section>
+          `;
+        }
+      )
+      .join("");
 
   return `
     <!doctype html>
@@ -296,16 +328,6 @@ const buildPortfolioHtml = (items: PortfolioReflection[]) => {
   `;
 };
 
-const FILTERS: (
-  | "All"
-  | Status
-)[] = [
-  "All",
-  "Draft",
-  "Submitted",
-  "Assessed",
-];
-
 export default function ReflectionList() {
   const [
     reflections,
@@ -330,6 +352,7 @@ export default function ReflectionList() {
     isLoading,
     setIsLoading,
   ] = useState(true);
+
   const [
     isExporting,
     setIsExporting,
@@ -540,90 +563,159 @@ export default function ReflectionList() {
   // EXPORT PORTFOLIO
   // ====================================================
 
-  const handleExportPortfolio = async () => {
-  try {
-    setIsExporting(true);
+  const handleExportPortfolio =
+    async () => {
+      try {
+        setIsExporting(true);
 
-    const reflectionResponse = await fetch(`${API_BASE_URL}/api/reflections`);
+        const reflectionResponse =
+          await fetch(
+            `${API_BASE_URL}/api/reflections`
+          );
 
-    if (!reflectionResponse.ok) {
-      throw new Error(`Failed to load reflections: ${reflectionResponse.status}`);
-    }
+        if (
+          !reflectionResponse.ok
+        ) {
+          throw new Error(
+            `Failed to load reflections: ${reflectionResponse.status}`
+          );
+        }
 
-    const allReflections =
-      (await reflectionResponse.json()) as ReflectionRecord[];
+        const allReflections =
+          (await reflectionResponse.json()) as ReflectionRecord[];
 
-    const exportableReflections = allReflections.filter((item) => {
-      const status = String(item.status || "").toLowerCase();
-      return status === "submitted" || status === "assessed";
-    });
+        const exportableReflections =
+          allReflections.filter(
+            (item) => {
+              const status =
+                String(
+                  item.status || ""
+                ).toLowerCase();
 
-    if (exportableReflections.length === 0) {
-      Alert.alert(
-        "Nothing to export",
-        "Submit or assess at least one reflection before exporting a portfolio."
-      );
+              return (
+                status ===
+                  "submitted" ||
+                status ===
+                  "assessed"
+              );
+            }
+          );
 
-      return;
-    }
+        if (
+          exportableReflections.length ===
+          0
+        ) {
+          Alert.alert(
+            "Nothing to export",
+            "Submit or assess at least one reflection before exporting a portfolio."
+          );
 
-    const portfolioItems = await Promise.all(
-      exportableReflections.map(async (reflection) => {
-        const id = reflection.id;
+          return;
+        }
 
-        const [selfAssessment, assessment, evidence] = await Promise.all([
-          fetchJsonOrNull<SelfAssessmentRecord>(
-            `${API_BASE_URL}/api/self-assessments/${id}`
-          ),
-          fetchJsonOrNull<AssessorAssessmentRecord>(
-            `${API_BASE_URL}/api/assessments/${id}`
-          ),
-          fetchJsonOrNull<EvidenceRecord[]>(
-            `${API_BASE_URL}/api/evidence/reflection/${id}`
-          ),
-        ]);
+        const portfolioItems =
+          await Promise.all(
+            exportableReflections.map(
+              async (
+                reflection
+              ) => {
+                const id =
+                  reflection.id;
 
-        return {
-          assessment,
-          evidence: evidence || [],
-          reflection,
-          selfAssessment,
-        };
-      })
-    );
+                const [
+                  selfAssessment,
+                  assessment,
+                  evidence,
+                ] =
+                  await Promise.all(
+                    [
+                      fetchJsonOrNull<SelfAssessmentRecord>(
+                        `${API_BASE_URL}/api/self-assessments/${id}`
+                      ),
 
-    const html = buildPortfolioHtml(portfolioItems);
+                      fetchJsonOrNull<AssessorAssessmentRecord>(
+                        `${API_BASE_URL}/api/assessments/${id}`
+                      ),
 
-    if (Platform.OS === "web") {
-      await Print.printAsync({ html });
-      return;
-    }
+                      fetchJsonOrNull<EvidenceRecord[]>(
+                        `${API_BASE_URL}/api/evidence/reflection/${id}`
+                      ),
+                    ]
+                  );
 
-    const { uri } = await Print.printToFileAsync({ html });
+                return {
+                  assessment,
+                  evidence:
+                    evidence || [],
+                  reflection,
+                  selfAssessment,
+                };
+              }
+            )
+          );
 
-    const canShare = await Sharing.isAvailableAsync();
+        const html =
+          buildPortfolioHtml(
+            portfolioItems
+          );
 
-    if (!canShare) {
-      Alert.alert("PDF generated", `The portfolio PDF was created at: ${uri}`);
-      return;
-    }
+        if (
+          Platform.OS ===
+          "web"
+        ) {
+          await Print.printAsync(
+            {
+              html,
+            }
+          );
 
-    await Sharing.shareAsync(uri, {
-      dialogTitle: "Save or share portfolio",
-      mimeType: "application/pdf",
-      UTI: "com.adobe.pdf",
-    });
-  } catch (error) {
-    console.error("Export portfolio error:", error);
+          return;
+        }
 
-    Alert.alert(
-      "Export failed",
-      "Could not export the portfolio. Please check the backend connection and try again."
-    );
-  } finally {
-    setIsExporting(false);
-  }
-};
+        const { uri } =
+          await Print.printToFileAsync(
+            {
+              html,
+            }
+          );
+
+        const canShare =
+          await Sharing.isAvailableAsync();
+
+        if (!canShare) {
+          Alert.alert(
+            "PDF generated",
+            `The portfolio PDF was created at: ${uri}`
+          );
+
+          return;
+        }
+
+        await Sharing.shareAsync(
+          uri,
+          {
+            dialogTitle:
+              "Save or share portfolio",
+            mimeType:
+              "application/pdf",
+            UTI:
+              "com.adobe.pdf",
+          }
+        );
+      } catch (error) {
+        console.error(
+          "Export portfolio error:",
+          error
+        );
+
+        Alert.alert(
+          "Export failed",
+          "Could not export the portfolio. Please check the backend connection and try again."
+        );
+      } finally {
+        setIsExporting(false);
+      }
+    };
 
   const isFilteredOrSearched =
     activeFilter !== "All" ||
@@ -950,18 +1042,41 @@ export default function ReflectionList() {
           {/* EXPORT */}
 
           <Pressable
-            disabled={isExporting}
-            style={({ pressed }) => [
+            disabled={
+              isExporting
+            }
+            style={({
+              pressed,
+            }) => [
               styles.secondaryButton,
-              isExporting && styles.disabledButton,
-              pressed && !isExporting && styles.primaryButtonPressed,
-            ]}
-            onPress={handleExportPortfolio}
-          >
-            <Ionicons name="share-outline" size={18} color="#3F2A88" />
 
-            <Text style={styles.secondaryButtonText}>
-              {isExporting ? "Exporting Portfolio..." : "Export Portfolio"}
+              isExporting &&
+                styles.disabledButton,
+
+              pressed &&
+                !isExporting &&
+                styles.primaryButtonPressed,
+            ]}
+            onPress={
+              handleExportPortfolio
+            }
+          >
+            <Ionicons
+              name="share-outline"
+              size={
+                18
+              }
+              color="#3F2A88"
+            />
+
+            <Text
+              style={
+                styles.secondaryButtonText
+              }
+            >
+              {isExporting
+                ? "Exporting Portfolio..."
+                : "Export Portfolio"}
             </Text>
           </Pressable>
         </View>
@@ -1269,7 +1384,7 @@ const styles =
     disabledButton: {
       opacity: 0.6,
     },
-    
+
     primaryButtonText: {
       color: "#FFFFFF",
       fontSize: 16,
